@@ -20,10 +20,18 @@ services:
       ASPNETCORE_ENVIRONMENT: Production
       DatabaseProvider: Postgres
       ConnectionStrings__VendorDatabase: Host=db;Port=5432;Database=vendorrisk;Username=postgres;Password=postgres
+      Cache__UseRedis: "true"
+      Cache__RedisConnection: redis:6379
     depends_on:
       - db
+      - redis
     ports:
       - "8080:8080"
+
+  redis:
+    image: redis:7
+    ports:
+      - "6379:6379"
 
 volumes:
   db_data:

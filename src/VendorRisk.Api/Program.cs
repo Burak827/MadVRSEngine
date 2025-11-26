@@ -2,8 +2,11 @@ using Microsoft.EntityFrameworkCore;
 using Serilog;
 using VendorRisk.Domain.Interfaces;
 using VendorRisk.Infrastructure.Data;
+using VendorRisk.Infrastructure.Options;
 using VendorRisk.Infrastructure.Repositories;
 using VendorRisk.Infrastructure.Services;
+using Microsoft.Extensions.Caching.Distributed;
+using Microsoft.Extensions.Options;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -20,8 +23,22 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
 ConfigureDatabase(builder);
+ConfigureCaching(builder);
 
-builder.Services.AddScoped<IVendorProfileRepository, VendorProfileRepository>();
+builder.Services.AddScoped<VendorProfileRepository>();
+builder.Services.AddScoped<IVendorProfileRepository>(sp =>
+{
+    var baseRepo = sp.GetRequiredService<VendorProfileRepository>();
+    var cacheOptions = sp.GetRequiredService<IOptions<CacheOptions>>().Value;
+    if (!cacheOptions.UseRedis)
+    {
+        return baseRepo;
+    }
+
+    var cache = sp.GetRequiredService<IDistributedCache>();
+    var logger = sp.GetRequiredService<ILogger<CachedVendorProfileRepository>>();
+    return new CachedVendorProfileRepository(baseRepo, cache, sp.GetRequiredService<IOptions<CacheOptions>>(), logger);
+});
 builder.Services.AddScoped<IRiskEngine, RuleEngineService>();
 builder.Services.AddSingleton<IRiskFactorMatrixProvider>(sp =>
 {
@@ -72,6 +89,22 @@ static void ConfigureDatabase(WebApplicationBuilder builder)
             options.UseInMemoryDatabase("VendorRiskDb");
         }
     });
+}
+
+static void ConfigureCaching(WebApplicationBuilder builder)
+{
+    builder.Services.Configure<CacheOptions>(builder.Configuration.GetSection("Cache"));
+    var cacheSection = builder.Configuration.GetSection("Cache");
+    var useRedis = cacheSection.GetValue<bool>("UseRedis");
+    if (useRedis)
+    {
+        var redisConnection = cacheSection.GetValue<string>("RedisConnection") ?? "localhost:6379";
+        builder.Services.AddStackExchangeRedisCache(options => options.Configuration = redisConnection);
+    }
+    else
+    {
+        builder.Services.AddDistributedMemoryCache();
+    }
 }
 
 static async Task SeedDatabaseAsync(IServiceProvider services)
