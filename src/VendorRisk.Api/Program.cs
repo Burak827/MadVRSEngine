@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Serilog;
+using Serilog.Sinks.Elasticsearch;
 using VendorRisk.Domain.Interfaces;
 using VendorRisk.Infrastructure.Data;
 using VendorRisk.Infrastructure.Options;
@@ -16,6 +17,16 @@ builder.Host.UseSerilog((context, services, configuration) =>
         .ReadFrom.Configuration(context.Configuration)
         .ReadFrom.Services(services)
         .Enrich.FromLogContext();
+
+    var elasticUri = context.Configuration["ElasticConfiguration:Uri"];
+    if (!string.IsNullOrWhiteSpace(elasticUri))
+    {
+        configuration.WriteTo.Elasticsearch(new ElasticsearchSinkOptions(new Uri(elasticUri))
+        {
+            IndexFormat = "vendorrisk-logs-{0:yyyy.MM.dd}",
+            AutoRegisterTemplate = true
+        });
+    }
 });
 
 builder.Services.AddControllers();
@@ -113,3 +124,5 @@ static async Task SeedDatabaseAsync(IServiceProvider services)
     var seeder = scope.ServiceProvider.GetRequiredService<DataSeeder>();
     await seeder.SeedAsync();
 }
+
+public partial class Program;

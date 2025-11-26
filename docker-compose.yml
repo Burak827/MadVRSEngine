@@ -22,9 +22,11 @@ services:
       ConnectionStrings__VendorDatabase: Host=db;Port=5432;Database=vendorrisk;Username=postgres;Password=postgres
       Cache__UseRedis: "true"
       Cache__RedisConnection: redis:6379
+      ElasticConfiguration__Uri: http://elasticsearch:9200
     depends_on:
       - db
       - redis
+      - elasticsearch
     ports:
       - "8080:8080"
 
@@ -33,5 +35,25 @@ services:
     ports:
       - "6379:6379"
 
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.12.1
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+    ports:
+      - "9200:9200"
+    volumes:
+      - es_data:/usr/share/elasticsearch/data
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.12.1
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+    depends_on:
+      - elasticsearch
+    ports:
+      - "5601:5601"
+
 volumes:
   db_data:
+  es_data:

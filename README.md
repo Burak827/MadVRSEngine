@@ -7,14 +7,15 @@ Rule-based, explainable vendor risk scorer aligned to the case study brief. Gene
   `dotnet run --project src/VendorRisk.Api`
 - Explore OpenAPI/Swagger: `http://localhost:5000/swagger` (or the HTTPS port shown in console).
 - Run tests: `dotnet test MadVRSEngine.sln`
-- Docker (API + PostgreSQL + Redis): `docker-compose up --build`  
-  API: `http://localhost:8080/swagger`, DB: `localhost:5432` (`vendorrisk` / `postgres` / `postgres`), Redis: `localhost:6379`.
+- Docker (API + PostgreSQL + Redis + Elasticsearch + Kibana): `docker-compose up --build`  
+  API: `http://localhost:8080/swagger`, DB: `localhost:5432` (`vendorrisk` / `postgres` / `postgres`), Redis: `localhost:6379`, Elasticsearch: `http://localhost:9200`, Kibana: `http://localhost:5601`.
 
 ## Configuration
 - `DatabaseProvider`: `InMemory` (default) or `Postgres` (for real DB). Override via environment variable.
 - `ConnectionStrings__VendorDatabase`: PostgreSQL connection string (used when provider = Postgres).
 - Dataset paths (copied to output): `Data:RiskMatrixPath` -> `Data/RiskFactorMatrix.json`, `Data:SeedPath` -> `Data/SampleVendorData.json`.
 - Caching: set `Cache:UseRedis=true` and `Cache:RedisConnection` (e.g., `localhost:6379`) to enable vendor lookup caching; TTL via `Cache:TtlSeconds` (default 300s). Falls back to in-memory cache when disabled.
+- Logging: `Serilog` console JSON by default; to forward to Elasticsearch set `ElasticConfiguration:Uri` (e.g., `http://localhost:9200`). Index name format: `vendorrisk-logs-YYYY.MM.DD`.
 - Logging: Serilog JSON console via `appsettings*.json` (compact JSON formatter, request logging enabled).
 
 ## Domain & Architecture
@@ -24,12 +25,12 @@ Rule-based, explainable vendor risk scorer aligned to the case study brief. Gene
 - **Tests (`VendorRisk.Tests`)**: xUnit + Moq + FluentAssertions covering rule engine scenarios.
 
 ## Endpoints
-- `GET /api/vendors` - list vendors (seeded from `SampleVendorData.json`).
-- `GET /api/vendors/{id}` - fetch vendor.
-- `POST /api/vendors` - create vendor (body = `VendorProfile` shape).
-- `PUT /api/vendors/{id}` - replace vendor.
-- `DELETE /api/vendors/{id}` - remove vendor.
-- `GET /api/vendors/{id}/risk` - compute risk assessment with explanations.
+- `GET /api/vendors` (alias: `/api/vendor`) - list vendors (seeded from `SampleVendorData.json`).
+- `GET /api/vendors/{id}` (alias: `/api/vendor/{id}`) - fetch vendor.
+- `POST /api/vendors` (alias: `/api/vendor`) - create vendor (body = `VendorProfile` shape).
+- `PUT /api/vendors/{id}` (alias: `/api/vendor/{id}`) - replace vendor.
+- `DELETE /api/vendors/{id}` (alias: `/api/vendor/{id}`) - remove vendor.
+- `GET /api/vendors/{id}/risk` (alias: `/api/vendor/{id}/risk`) - compute risk assessment with explanations.
 
 Example: `GET /api/vendors/1/risk`
 ```json
@@ -38,6 +39,7 @@ Example: `GET /api/vendors/1/risk`
   "riskScore": 0.74,
   "riskLevel": "High",
   "breakdown": { "financialRisk": 0.45, "operationalRisk": 0.62, "securityComplianceRisk": 0.77 },
+  "reason": "Missing ISO27001 certification elevates security risk. | Privacy policy expired or missing. | Related risk patterns: downtime (0.87), slowTicketResolution (0.83)",
   "reasons": [
     "Missing ISO27001 certification elevates security risk.",
     "Privacy policy expired or missing.",
@@ -45,6 +47,11 @@ Example: `GET /api/vendors/1/risk`
   ]
 }
 ```
+
+## Database migrations (Postgres)
+- Create/update database:  
+  `DatabaseProvider=Postgres ConnectionStrings__VendorDatabase="Host=localhost;Port=5432;Database=vendorrisk;Username=postgres;Password=postgres" dotnet ef database update --startup-project src/VendorRisk.Api --project src/VendorRisk.Infrastructure`
+- Migrations live in `src/VendorRisk.Infrastructure/Data/Migrations`.
 
 ## Scoring Model
 - Formula: `FinalScore = (FinancialRisk * 0.4) + (OperationalRisk * 0.3) + (SecurityComplianceRisk * 0.3)`.
@@ -59,8 +66,8 @@ Example: `GET /api/vendors/1/risk`
 - Similarity matrix: `src/VendorRisk.Api/Data/RiskFactorMatrix.json`.
 
 ## Docker Notes
-- API listens on `8080`; PostgreSQL exposed on `5432`; Redis on `6379`.
-- `docker-compose.yml` wires API to Postgres and Redis (`DatabaseProvider=Postgres`, `Cache__UseRedis=true`).
+- API listens on `8080`; PostgreSQL on `5432`; Redis on `6379`; Elasticsearch on `9200`; Kibana on `5601`.
+- `docker-compose.yml` wires API to Postgres/Redis/Elasticsearch (`DatabaseProvider=Postgres`, `Cache__UseRedis=true`, `ElasticConfiguration__Uri=http://elasticsearch:9200`).
 
 ## What's Next (not implemented)
 - UI/dashboard for vendor comparison.

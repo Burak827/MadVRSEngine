@@ -21,7 +21,14 @@ public class DataSeeder
 
     public async Task SeedAsync(CancellationToken cancellationToken = default)
     {
-        await _context.Database.EnsureCreatedAsync(cancellationToken);
+        if (_context.Database.IsRelational())
+        {
+            await _context.Database.MigrateAsync(cancellationToken);
+        }
+        else
+        {
+            await _context.Database.EnsureCreatedAsync(cancellationToken);
+        }
 
         if (await _context.VendorProfiles.AnyAsync(cancellationToken))
         {
