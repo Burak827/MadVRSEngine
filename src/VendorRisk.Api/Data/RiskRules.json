@@ -1,0 +1,33 @@
+{
+  "weights": { "financial": 0.4, "operational": 0.3, "security": 0.3 },
+  "financial": {
+    "lowThreshold": 50,
+    "highThreshold": 80,
+    "midMaxThreshold": 65,
+    "highRisk": 0.85,
+    "lowRisk": 0.25,
+    "midRisk": 0.6,
+    "stableRisk": 0.45
+  },
+  "operational": {
+    "base": 0.4,
+    "slaLowThreshold": 95,
+    "slaHighThreshold": 99,
+    "slaPenalty": 0.25,
+    "slaBonus": 0.1,
+    "incidentStep": 0.07,
+    "incidentMax": 0.3
+  },
+  "security": {
+    "base": 0.35,
+    "missingIsoPenalty": 0.25,
+    "privacyPenalty": 0.2,
+    "pentestPenalty": 0.25,
+    "noCertPenalty": 0.1
+  },
+  "similarityScale": {
+    "operational": 0.1,
+    "security": 0.1,
+    "compliance": 0.1
+  }
+}

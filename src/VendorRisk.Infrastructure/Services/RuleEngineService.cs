@@ -8,25 +8,31 @@ public class RuleEngineService : IRiskEngine
 {
     private readonly IRiskFactorMatrixProvider _matrixProvider;
     private readonly ILogger<RuleEngineService> _logger;
+    private readonly IRiskRulesProvider _rulesProvider;
 
-    public RuleEngineService(IRiskFactorMatrixProvider matrixProvider, ILogger<RuleEngineService> logger)
+    public RuleEngineService(IRiskFactorMatrixProvider matrixProvider, IRiskRulesProvider rulesProvider, ILogger<RuleEngineService> logger)
     {
         _matrixProvider = matrixProvider;
+        _rulesProvider = rulesProvider;
         _logger = logger;
     }
 
     public async Task<RiskAssessment> EvaluateAsync(VendorProfile vendor, CancellationToken cancellationToken = default)
     {
+        // Defensive init to avoid null refs when requests omit collections/owned types.
         vendor.Documents ??= new VendorDocuments();
         vendor.SecurityCerts ??= new List<string>();
         var reasons = new List<string>();
-        var matrix = await _matrixProvider.GetMatrixAsync(cancellationToken);
+        var matrix = await _matrixProvider.GetMatrixAsync(cancellationToken); // Similarity data for explainability
+        var rules = await _rulesProvider.GetAsync(cancellationToken); // Tunable thresholds/weights
 
-        var financial = ComputeFinancialRisk(vendor, reasons);
-        var operational = ComputeOperationalRisk(vendor, matrix, reasons);
-        var security = ComputeSecurityComplianceRisk(vendor, matrix, reasons);
+        var financial = ComputeFinancialRisk(vendor, rules, reasons);
+        var operational = ComputeOperationalRisk(vendor, matrix, rules, reasons);
+        var security = ComputeSecurityComplianceRisk(vendor, matrix, rules, reasons);
 
-        var score = (financial * 0.4) + (operational * 0.3) + (security * 0.3);
+        var score = (financial * rules.Weights.Financial) +
+                    (operational * rules.Weights.Operational) +
+                    (security * rules.Weights.Security);
         var level = DetermineRiskLevel(score);
 
         _logger.LogInformation("Computed risk for {Vendor}: score {Score} ({Level})", vendor.Name, score, level);
@@ -46,52 +52,53 @@ public class RuleEngineService : IRiskEngine
         };
     }
 
-    private static double ComputeFinancialRisk(VendorProfile vendor, ICollection<string> reasons)
+    private static double ComputeFinancialRisk(VendorProfile vendor, RiskRulesConfig rules, ICollection<string> reasons)
     {
-        if (vendor.FinancialHealth < 50)
+        if (vendor.FinancialHealth < rules.Financial.LowThreshold)
         {
             reasons.Add("Financial health below 50 triggers high financial risk.");
-            return 0.85;
+            return rules.Financial.HighRisk;
         }
 
-        if (vendor.FinancialHealth > 80)
+        if (vendor.FinancialHealth > rules.Financial.HighThreshold)
         {
             reasons.Add("Financial health above 80 reduces financial risk.");
-            return 0.25;
+            return rules.Financial.LowRisk;
         }
 
-        if (vendor.FinancialHealth is >= 50 and <= 65)
+        if (vendor.FinancialHealth >= rules.Financial.LowThreshold && vendor.FinancialHealth <= rules.Financial.MidMaxThreshold)
         {
             reasons.Add("Financial health between 50-65 indicates moderate debt/liquidity risk.");
-            return 0.6;
+            return rules.Financial.MidRisk;
         }
 
         reasons.Add("Financial health in a stable range.");
-        return 0.45;
+        return rules.Financial.StableRisk;
     }
 
-    private static double ComputeOperationalRisk(VendorProfile vendor, RiskFactorMatrix matrix, ICollection<string> reasons)
+    private static double ComputeOperationalRisk(VendorProfile vendor, RiskFactorMatrix matrix, RiskRulesConfig rules, ICollection<string> reasons)
     {
-        double risk = 0.4;
+        // Base operational exposure before evaluating SLA/incidents.
+        double risk = rules.Operational.Base;
 
-        if (vendor.SlaUptime < 95)
+        if (vendor.SlaUptime < rules.Operational.SlaLowThreshold)
         {
-            risk += 0.25;
-            risk += GetSimilarityImpact("slaDrop", matrix.OperationalRisk);
+            risk += rules.Operational.SlaPenalty; // SLA under threshold
+            risk += GetSimilarityImpact("slaDrop", matrix.OperationalRisk, rules.SimilarityScale.Operational);
             reasons.Add("SLA uptime below 95% increases operational exposure.");
             AppendSimilarRisks("slaDrop", matrix.OperationalRisk, reasons);
         }
-        else if (vendor.SlaUptime > 99)
+        else if (vendor.SlaUptime > rules.Operational.SlaHighThreshold)
         {
-            risk -= 0.1;
+            risk -= rules.Operational.SlaBonus;
             reasons.Add("SLA uptime above 99% reduces operational risk.");
         }
 
         if (vendor.MajorIncidents > 0)
         {
-            var incidentRisk = Math.Min(0.3, vendor.MajorIncidents * 0.07);
+            var incidentRisk = Math.Min(rules.Operational.IncidentMax, vendor.MajorIncidents * rules.Operational.IncidentStep);
             risk += incidentRisk;
-            risk += GetSimilarityImpact("majorIncident", matrix.OperationalRisk);
+            risk += GetSimilarityImpact("majorIncident", matrix.OperationalRisk, rules.SimilarityScale.Operational);
             reasons.Add($"Recorded {vendor.MajorIncidents} major incidents in the last 12 months.");
             AppendSimilarRisks("majorIncident", matrix.OperationalRisk, reasons);
         }
@@ -99,38 +106,39 @@ public class RuleEngineService : IRiskEngine
         return Clamp(risk);
     }
 
-    private static double ComputeSecurityComplianceRisk(VendorProfile vendor, RiskFactorMatrix matrix, ICollection<string> reasons)
+    private static double ComputeSecurityComplianceRisk(VendorProfile vendor, RiskFactorMatrix matrix, RiskRulesConfig rules, ICollection<string> reasons)
     {
-        double risk = 0.35;
+        // Start from baseline then add penalties for missing certs/docs.
+        double risk = rules.Security.Base;
         var hasIso = vendor.SecurityCerts.Any(c => c.Equals("ISO27001", StringComparison.OrdinalIgnoreCase));
 
         if (!hasIso)
         {
-            risk += 0.25;
-            risk += GetSimilarityImpact("missingISO27001", matrix.SecurityRisk);
+            risk += rules.Security.MissingIsoPenalty; // Missing ISO baseline
+            risk += GetSimilarityImpact("missingISO27001", matrix.SecurityRisk, rules.SimilarityScale.Security);
             reasons.Add("Missing ISO27001 certification elevates security risk.");
             AppendSimilarRisks("missingISO27001", matrix.SecurityRisk, reasons);
         }
 
         if (!vendor.Documents.PrivacyPolicyValid)
         {
-            risk += 0.2;
-            risk += GetSimilarityImpact("expiredPrivacyPolicy", matrix.ComplianceRisk);
+            risk += rules.Security.PrivacyPenalty; // Compliance document stale
+            risk += GetSimilarityImpact("expiredPrivacyPolicy", matrix.ComplianceRisk, rules.SimilarityScale.Compliance);
             reasons.Add("Privacy policy expired or missing.");
             AppendSimilarRisks("expiredPrivacyPolicy", matrix.ComplianceRisk, reasons);
         }
 
         if (!vendor.Documents.PentestReportValid)
         {
-            risk += 0.25;
-            risk += GetSimilarityImpact("failedPenTest", matrix.SecurityRisk);
+            risk += rules.Security.PentestPenalty; // Pentest missing/failed
+            risk += GetSimilarityImpact("failedPenTest", matrix.SecurityRisk, rules.SimilarityScale.Security);
             reasons.Add("Failed or missing penetration test report.");
             AppendSimilarRisks("failedPenTest", matrix.SecurityRisk, reasons);
         }
 
         if (!vendor.SecurityCerts.Any())
         {
-            risk += 0.1;
+            risk += rules.Security.NoCertPenalty;
             reasons.Add("No security certifications provided.");
         }
 
@@ -161,7 +169,7 @@ public class RuleEngineService : IRiskEngine
         reasons.Add($"Related risk patterns: {string.Join(", ", topRelated)}");
     }
 
-    private static double GetSimilarityImpact(string key, Dictionary<string, Dictionary<string, double>> table, double scale = 0.1)
+    private static double GetSimilarityImpact(string key, Dictionary<string, Dictionary<string, double>> table, double scale)
     {
         if (!table.TryGetValue(key, out var related) || related.Count == 0)
         {

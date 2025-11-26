@@ -21,6 +21,7 @@ builder.Host.UseSerilog((context, services, configuration) =>
     var elasticUri = context.Configuration["ElasticConfiguration:Uri"];
     if (!string.IsNullOrWhiteSpace(elasticUri))
     {
+        // Push logs to Elasticsearch when a URI is provided; otherwise console-only.
         configuration.WriteTo.Elasticsearch(new ElasticsearchSinkOptions(new Uri(elasticUri))
         {
             IndexFormat = "vendorrisk-logs-{0:yyyy.MM.dd}",
@@ -46,6 +47,7 @@ builder.Services.AddScoped<IVendorProfileRepository>(sp =>
         return baseRepo;
     }
 
+    // Decorate repository with Redis cache for hot vendor reads.
     var cache = sp.GetRequiredService<IDistributedCache>();
     var logger = sp.GetRequiredService<ILogger<CachedVendorProfileRepository>>();
     return new CachedVendorProfileRepository(baseRepo, cache, sp.GetRequiredService<IOptions<CacheOptions>>(), logger);
@@ -57,6 +59,13 @@ builder.Services.AddSingleton<IRiskFactorMatrixProvider>(sp =>
     var logger = sp.GetRequiredService<ILogger<FileRiskFactorMatrixProvider>>();
     var filePath = Path.Combine(env.ContentRootPath, builder.Configuration["Data:RiskMatrixPath"] ?? "Data/RiskFactorMatrix.json");
     return new FileRiskFactorMatrixProvider(filePath, logger);
+});
+builder.Services.AddSingleton<IRiskRulesProvider>(sp =>
+{
+    var env = sp.GetRequiredService<IHostEnvironment>();
+    var logger = sp.GetRequiredService<ILogger<FileRiskRulesProvider>>();
+    var filePath = Path.Combine(env.ContentRootPath, builder.Configuration["Data:RulesPath"] ?? "Data/RiskRules.json");
+    return new FileRiskRulesProvider(filePath, logger);
 });
 
 builder.Services.AddScoped<DataSeeder>(sp =>

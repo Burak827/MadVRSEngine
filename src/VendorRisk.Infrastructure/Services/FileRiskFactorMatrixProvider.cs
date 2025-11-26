@@ -41,6 +41,7 @@ public class FileRiskFactorMatrixProvider : IRiskFactorMatrixProvider
                 return _cachedMatrix;
             }
 
+            // Warm up similarity matrix to enrich explanations.
             await using var stream = File.OpenRead(_filePath);
             var matrix = await JsonSerializer.DeserializeAsync<RiskFactorMatrix>(stream, JsonOptions, cancellationToken);
             _cachedMatrix = matrix ?? new RiskFactorMatrix();

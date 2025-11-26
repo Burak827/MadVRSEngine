@@ -35,10 +35,12 @@ public class VendorDbContext : DbContext
                 .IsRequired()
                 .HasMaxLength(200);
 
+            // Basic scalar props.
             builder.Property(v => v.FinancialHealth).IsRequired();
             builder.Property(v => v.SlaUptime).IsRequired();
             builder.Property(v => v.MajorIncidents).IsRequired();
 
+            // Store cert list as JSON string to keep schema simple.
             builder.Property(v => v.SecurityCerts)
                 .HasConversion(certConverter)
                 .Metadata.SetValueComparer(certComparer);

@@ -28,14 +28,19 @@ public class RuleEngineServiceTests
             }
         };
 
+    private static RiskRulesConfig CreateRules() => new();
+
     [Fact]
     public async Task EvaluateAsync_ReturnsCritical_WhenCertificationsAndDocsMissing()
     {
         var provider = new Mock<IRiskFactorMatrixProvider>();
         provider.Setup(p => p.GetMatrixAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(CreateMatrix());
+        var rulesProvider = new Mock<IRiskRulesProvider>();
+        rulesProvider.Setup(p => p.GetAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(CreateRules());
 
-        var engine = new RuleEngineService(provider.Object, NullLogger<RuleEngineService>.Instance);
+        var engine = new RuleEngineService(provider.Object, rulesProvider.Object, NullLogger<RuleEngineService>.Instance);
 
         var vendor = new VendorProfile
         {
@@ -62,8 +67,11 @@ public class RuleEngineServiceTests
         var provider = new Mock<IRiskFactorMatrixProvider>();
         provider.Setup(p => p.GetMatrixAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(CreateMatrix());
+        var rulesProvider = new Mock<IRiskRulesProvider>();
+        rulesProvider.Setup(p => p.GetAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(CreateRules());
 
-        var engine = new RuleEngineService(provider.Object, NullLogger<RuleEngineService>.Instance);
+        var engine = new RuleEngineService(provider.Object, rulesProvider.Object, NullLogger<RuleEngineService>.Instance);
 
         var vendor = new VendorProfile
         {

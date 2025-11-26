@@ -22,6 +22,7 @@ public class VendorController : ControllerBase
     [ProducesResponseType(typeof(IReadOnlyCollection<VendorProfile>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetAll(CancellationToken cancellationToken)
     {
+        // Simple listing of all vendors (seeded on startup).
         var vendors = await _repository.ListAsync(cancellationToken);
         return Ok(vendors);
     }
@@ -103,6 +104,7 @@ public class VendorController : ControllerBase
         }
 
         var assessment = await _riskEngine.EvaluateAsync(vendor, cancellationToken);
+        // Returns computed score, level, and human-readable reasons.
         return Ok(assessment);
     }
 }

@@ -21,6 +21,7 @@ public class DataSeeder
 
     public async Task SeedAsync(CancellationToken cancellationToken = default)
     {
+        // Relational providers get migrations; in-memory gets EnsureCreated.
         if (_context.Database.IsRelational())
         {
             await _context.Database.MigrateAsync(cancellationToken);
@@ -41,6 +42,7 @@ public class DataSeeder
             return;
         }
 
+        // Load sample vendors for deterministic local/testing behavior.
         await using var stream = File.OpenRead(_seedFilePath);
         var seedData = await JsonSerializer.DeserializeAsync<SeedVendors>(stream, JsonOptions, cancellationToken);
         if (seedData?.Vendors is null || seedData.Vendors.Count == 0)

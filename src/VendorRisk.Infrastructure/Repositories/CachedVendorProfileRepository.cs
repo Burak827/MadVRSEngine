@@ -34,9 +34,11 @@ public class CachedVendorProfileRepository : IVendorProfileRepository
         var cached = await _cache.GetStringAsync(cacheKey, cancellationToken);
         if (cached is not null)
         {
+            // Hit: deserialize and return.
             return JsonSerializer.Deserialize<VendorProfile>(cached, SerializerOptions);
         }
 
+        // Miss: fetch from store and populate cache.
         var vendor = await _inner.GetAsync(id, cancellationToken);
         if (vendor is not null)
         {
