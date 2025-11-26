@@ -1,0 +1,25 @@
+# Build artifacts
+bin/
+obj/
+out/
+
+# User-specific files
+.vs/
+.vscode/
+*.user
+*.suo
+
+# Logs
+*.log
+logs/
+
+# Generated
+TestResults/
+coverage/
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# Temp
+tmp/
