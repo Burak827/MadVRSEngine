@@ -5,7 +5,7 @@ Rule-based, explainable vendor risk scorer aligned to the case study brief. Gene
 ## Quickstart
 - Restore & run API (defaults to in-memory DB and ships with seed vendors):  
   `dotnet run --project src/VendorRisk.Api`
-- Explore OpenAPI/Swagger: `http://localhost:5000/swagger` (or the HTTPS port shown in console).
+- Explore OpenAPI/Swagger: `http://localhost:5263/swagger` (or the HTTPS port shown in console; Kestrel port is printed when you run).
 - Run tests: `dotnet test MadVRSEngine.sln`
 - Docker (API + PostgreSQL + Redis + Elasticsearch + Kibana): `docker-compose up --build`  
   API: `http://localhost:8080/swagger`, DB: `localhost:5432` (`vendorrisk` / `postgres` / `postgres`), Redis: `localhost:6379`, Elasticsearch: `http://localhost:9200`, Kibana: `http://localhost:5601`.
@@ -15,8 +15,7 @@ Rule-based, explainable vendor risk scorer aligned to the case study brief. Gene
 - `ConnectionStrings__VendorDatabase`: PostgreSQL connection string (used when provider = Postgres).
 - Dataset paths (copied to output): `Data:RiskMatrixPath` -> `Data/RiskFactorMatrix.json`, `Data:SeedPath` -> `Data/SampleVendorData.json`.
 - Caching: set `Cache:UseRedis=true` and `Cache:RedisConnection` (e.g., `localhost:6379`) to enable vendor lookup caching; TTL via `Cache:TtlSeconds` (default 300s). Falls back to in-memory cache when disabled.
-- Logging: `Serilog` console JSON by default; to forward to Elasticsearch set `ElasticConfiguration:Uri` (e.g., `http://localhost:9200`). Index name format: `vendorrisk-logs-YYYY.MM.DD`.
-- Logging: Serilog JSON console via `appsettings*.json` (compact JSON formatter, request logging enabled).
+- Logging: Serilog JSON console via `appsettings*.json` (compact JSON formatter, request logging enabled); to forward to Elasticsearch set `ElasticConfiguration:Uri` (e.g., `http://localhost:9200`). Index format: `vendorrisk-logs-YYYY.MM.DD`.
 
 ## Domain & Architecture
 - **Domain (`VendorRisk.Domain`)**: `VendorProfile`, `VendorDocuments`, `RiskAssessment` (+ `RiskBreakdown`, `RiskLevel`), interfaces for `IRiskEngine`, `IRiskFactorMatrixProvider`, `IVendorProfileRepository`.
