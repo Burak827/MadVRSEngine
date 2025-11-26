@@ -6,6 +6,7 @@ namespace VendorRisk.Api.Controllers;
 
 [ApiController]
 [Route("api/vendors")]
+[Route("api/vendor")]
 public class VendorController : ControllerBase
 {
     private readonly IVendorProfileRepository _repository;

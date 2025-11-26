@@ -77,6 +77,7 @@ public class RuleEngineService : IRiskEngine
         if (vendor.SlaUptime < 95)
         {
             risk += 0.25;
+            risk += GetSimilarityImpact("slaDrop", matrix.OperationalRisk);
             reasons.Add("SLA uptime below 95% increases operational exposure.");
             AppendSimilarRisks("slaDrop", matrix.OperationalRisk, reasons);
         }
@@ -90,6 +91,7 @@ public class RuleEngineService : IRiskEngine
         {
             var incidentRisk = Math.Min(0.3, vendor.MajorIncidents * 0.07);
             risk += incidentRisk;
+            risk += GetSimilarityImpact("majorIncident", matrix.OperationalRisk);
             reasons.Add($"Recorded {vendor.MajorIncidents} major incidents in the last 12 months.");
             AppendSimilarRisks("majorIncident", matrix.OperationalRisk, reasons);
         }
@@ -105,6 +107,7 @@ public class RuleEngineService : IRiskEngine
         if (!hasIso)
         {
             risk += 0.25;
+            risk += GetSimilarityImpact("missingISO27001", matrix.SecurityRisk);
             reasons.Add("Missing ISO27001 certification elevates security risk.");
             AppendSimilarRisks("missingISO27001", matrix.SecurityRisk, reasons);
         }
@@ -112,6 +115,7 @@ public class RuleEngineService : IRiskEngine
         if (!vendor.Documents.PrivacyPolicyValid)
         {
             risk += 0.2;
+            risk += GetSimilarityImpact("expiredPrivacyPolicy", matrix.ComplianceRisk);
             reasons.Add("Privacy policy expired or missing.");
             AppendSimilarRisks("expiredPrivacyPolicy", matrix.ComplianceRisk, reasons);
         }
@@ -119,6 +123,7 @@ public class RuleEngineService : IRiskEngine
         if (!vendor.Documents.PentestReportValid)
         {
             risk += 0.25;
+            risk += GetSimilarityImpact("failedPenTest", matrix.SecurityRisk);
             reasons.Add("Failed or missing penetration test report.");
             AppendSimilarRisks("failedPenTest", matrix.SecurityRisk, reasons);
         }
@@ -154,6 +159,17 @@ public class RuleEngineService : IRiskEngine
             .Select(kvp => $"{kvp.Key} ({kvp.Value:0.00})");
 
         reasons.Add($"Related risk patterns: {string.Join(", ", topRelated)}");
+    }
+
+    private static double GetSimilarityImpact(string key, Dictionary<string, Dictionary<string, double>> table, double scale = 0.1)
+    {
+        if (!table.TryGetValue(key, out var related) || related.Count == 0)
+        {
+            return 0;
+        }
+
+        var max = related.Max(kvp => kvp.Value);
+        return max * scale;
     }
 
     private static double Clamp(double value) => Math.Max(0, Math.Min(1, value));
